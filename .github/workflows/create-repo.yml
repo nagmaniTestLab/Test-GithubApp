@@ -1,0 +1,75 @@
+name: Create Repo (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: Repository name to create
+        required: true
+        type: string
+      description:
+        description: Repository description
+        required: false
+        default: ""
+        type: string
+      visibility:
+        description: Repository visibility
+        required: true
+        default: public
+        type: choice
+        options:
+          - public
+          - private
+      org_name:
+        description: Organization name (leave empty for current user)
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  create-repository:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure script is executable
+        run: chmod +x create_github_repo.sh
+
+      - name: Write GitHub App private key to file
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/github-app"
+          printf '%s' "${{ secrets.GITHUB_APP_PRIVATE_KEY }}" > "$RUNNER_TEMP/github-app/private-key.pem"
+          chmod 600 "$RUNNER_TEMP/github-app/private-key.pem"
+          echo "GITHUB_APP_PRIVATE_KEY_PATH=$RUNNER_TEMP/github-app/private-key.pem" >> "$GITHUB_ENV"
+
+      - name: Create repository
+        shell: bash
+        env:
+          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
+          GITHUB_APP_INSTALLATION_ID: ${{ secrets.GITHUB_APP_INSTALLATION_ID }}
+        run: |
+          set -euo pipefail
+
+          ARGS=("${{ inputs.repo_name }}")
+
+          if [[ -n "${{ inputs.description }}" ]]; then
+            ARGS+=(--description "${{ inputs.description }}")
+          fi
+
+          if [[ "${{ inputs.visibility }}" == "private" ]]; then
+            ARGS+=(--private)
+          else
+            ARGS+=(--public)
+          fi
+
+          if [[ -n "${{ inputs.org_name }}" ]]; then
+            ARGS+=(--org "${{ inputs.org_name }}")
+          fi
+
+          ./create_github_repo.sh "${ARGS[@]}"
